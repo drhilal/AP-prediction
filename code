@@ -1,0 +1,81 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import cross_val_score, StratifiedKFold, train_test_split,cross_val_predict
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from catboost import CatBoostClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from interpret.glassbox import ExplainableBoostingClassifier
+from interpret import show
+from interpret.perf import RegressionPerf
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score, roc_curve
+
+
+file_path = 'veri.xlsx'  
+data = pd.read_excel(file_path)
+
+
+X = data.drop('AP', axis=1)  
+y = data['AP']  
+
+
+n_repeats = 5
+n_splits = 10
+cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+
+models = {
+    'AdaBoost': AdaBoostClassifier(),
+    'GradientBoosting': GradientBoostingClassifier(),
+    'CatBoost': CatBoostClassifier(silent=True),
+    'XGBoost': XGBClassifier(),
+    'LightGBM': LGBMClassifier(),
+    'EBM': ExplainableBoostingClassifier()
+}
+
+results = {}
+for model_name, model in models.items():
+   
+    y_pred = cross_val_predict(model, X, y, cv=cv, n_jobs=-1, method='predict_proba')[:, 1]
+
+    
+    fpr, tpr, thresholds = roc_curve(y, y_pred)
+
+  
+    auc = roc_auc_score(y, y_pred)
+
+    
+    cm = confusion_matrix(y, y_pred > 0.5)
+
+   
+    tn, fp, fn, tp = cm.ravel()
+
+    
+    accuracy = accuracy_score(y, y_pred > 0.5)
+    f1 = f1_score(y, y_pred > 0.5)
+    sensitivity = tp / (tp + fn)
+    specificity = tn / (tn + fp)
+    youden_index = sensitivity + specificity - 1
+    ppv = tp / (tp + fp)
+    npv = tn / (tn + fn)
+
+    results[model_name] = {
+        'Accuracy': accuracy,
+        'F1-Score': f1,
+        'Sensitivity': sensitivity,
+        'Specificity': specificity,
+        "Youden's Index": youden_index,
+        'PPV': ppv,
+        'NPV': npv,
+        'AUC': auc
+    }
+
+
+for model_name, metrics in results.items():
+    print(f"Model: {model_name}")
+    for metric_name, value in metrics.items():
+        print(f"{metric_name}: {value:.4f}")
+    print()
+show(ebm.explain_global())
+
+show(ebm.explain_local(X[:5], y[:5]), 0)
